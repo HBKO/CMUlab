@@ -310,11 +310,11 @@ int bitReverse(int x) {
  *   Rating: 2
  */
 unsigned float_abs(unsigned uf) {
-  int mask_1=0x7fffffff;
-  int mask_2=0x7f800000;
-  int mask_3=0x007fffff;
-  if((!((uf&mask_2)^mask_2))&&(!!(uf&mask_3))) return uf;
-  else return uf&mask_1;
+    int exp=uf&0x7f800000;
+    int frac=uf&0x007fffff;
+    if (exp==0x7f800000 && frac!=0)
+      return uf;
+    return (0x00000000) |exp | frac;
 }
 /* 
  * float_i2f - Return bit-level equivalent of expression (float) x
@@ -326,32 +326,38 @@ unsigned float_abs(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-  int sign=(x&0x80000000);
-  int exp;
+  int sign=x&0x80000000;
+  int delta=0;
+  int exp=0;
+  int i=30;
   int frac=0;
   int frac_mask=0x7fffff;
-  int delta;
-  int i=30;
   if(x==0) return 0;
   else if(x==0x80000000) exp=158;
-  else{
-
-    if(!!sign) x=-x;
+  else
+  {
+    //将x负数换为正数
+    if(!!sign) x=(~x)+1;
+    //取exp值
+    //实际上默认当做0.111
     while(!(x>>i))
-      i--;
-    exp=i+127;//get the exp
-    x=x<<(31-i); //clean the zero
-    frac=(x>>8)&frac_mask; //get the frac
+      --i;
+    exp=i+127;
+    //去掉前面所有的0
+    x=x<<(31-i);
+    //取frac，>>8说明当成0.111，使用默认加上的0
+    frac=(x>>8) & frac_mask;
     x=x&0xff;
-    delta=(x>128)||((x==128)&&(frac&1)); //round
+    delta=(x>128) || ((x==128) && (frac & 1));
     frac+=delta;
-    if(frac>>23)
+    //frac如果需要进位
+    if(frac>frac_mask)
     {
-      frac=frac&frac_mask;
-      exp=exp+1;
+      exp++;
+      frac=frac & frac_mask;
     }
   }
-  return (sign)|(exp<<23)|frac;
+  return sign | (exp<<23) | frac;
 }
 /* 
  * float_times64 - Return bit-level equivalent of expression 64*f for
@@ -365,41 +371,46 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 unsigned float_times64(unsigned uf) {
-   int sign=uf&0x80000000;
-   int exp=(uf&0x7f800000)>>23;
-   int frac=uf&0x7fffff;
-   int exp_add=6;
-   if(exp==0)
-   {
-    if(frac==0) return uf;   //uf==0
-    else                    //uf==denormal
+  int sign=uf & 0x80000000;
+  int exp=uf & 0x7f800000;
+  int frac=uf & 0x7fffff;
+  int temp;
+  exp=exp>>23;
+  //Denormalized
+  if(exp==0)
+  {
+    if(frac==0) return uf;
+    else
     {
-      while(exp_add>0)
+      int i=23;
+      while(!(frac>>i))
+        i--;
+      temp=22-i;
+      //非溢出
+      if(temp>=6) frac=frac<<6;
+      //溢出
+      else
       {
-        frac=frac<<1;
-        if(frac>0x7fffff)
-        {
-          exp=exp+exp_add;
-          exp_add=0;
-        }
-        else
-          exp_add=exp_add+0xffffffff;
+        frac=(frac<<(temp+1)) & 0x7fffff;
+        exp=i-16;
       }
-      frac=frac&0x7fffff;
     }
   }
-  else if(exp==0xff)   //exp=0x111111...
+  else
   {
-        if(!!frac)  return uf;   //uf==NaN
+    //Inifity or NaN
+    if(exp==0xff)
+    {
+       return uf;
+    }
+    //Normailized
+    exp=exp+6;
+    //指数位溢出,说明出来的数字为无穷大
+    if((exp&0x100) ||(exp==0xff))
+    {
+        exp=0xff;
+        frac=0;
+    }
   }
-   else            //normal
-   {
-        exp=exp+exp_add;
-        if(exp>254) //overflow
-        {
-          exp=255;
-          frac=0;
-        } 
-   }
-   return sign|(exp<<23)|frac;
+  return sign | (exp<<23) | frac;
 }
