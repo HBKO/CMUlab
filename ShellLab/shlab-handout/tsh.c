@@ -11,7 +11,11 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 #include <errno.h>
+
+
+
 
 /* Misc manifest constants */
 #define MAXLINE    1024   /* max line size */
@@ -24,6 +28,13 @@
 #define FG 1    /* running in foreground */
 #define BG 2    /* running in background */
 #define ST 3    /* stopped */
+
+
+/* Sleep for a random period between [0,MAX_SLEEP] us */
+#define MAX_SLEEP 100000
+
+/* Macro that maps val into the range [0,RAND_MAX] */
+#define CONVERT(val) (((double)val)/(double)RAND_MAX)
 
 /* 
  * Jobs states: FG (foreground), BG (background), ST (stopped)
@@ -161,13 +172,46 @@ int main(int argc, char **argv)
   
 
 //对fork()的警告进行封装
+//对一个fork的包装函数，它随机地决定父进程和子进程执行的顺序。父进程和
+//子进程扔一枚硬币来决定谁会休眠，因而给另一个进程被调度的机会
+//及尽可能的产生竞争条件的情况，来进行问题检测
 pid_t Fork(void)
 {
+    static struct timeval time;
+    unsigned boo1,secs;
     pid_t pid;
+
+    /* Generate a different seed each time the function is called */
+    //获取当前时间，利用当前时间来产生随机种子
+    gettimeofday(&time,NULL);
+    srand(time.tv_usec);
+
+    /* Determine whether to sleep in parent of child and for how long */
+    //决定那个进程睡眠
+    boo1=(unsigned)(CONVERT(rand())+0.5);
+    //决定该进程睡眠多久
+    secs=(unsigned)(CONVERT(rand())*MAX_SLEEP);
+
+    /* Call the real fork function */
     if((pid=fork())<0)
+        return pid;
+    
+    if(pid==0) //Child
     {
-        unix_error("Fork error");
+        if(boo1)
+        {
+            usleep(secs);
+        }
     }
+    else    //Parent
+    {
+        if(!boo1)
+        {
+            usleep(secs);
+        }
+    }
+
+    /* Return the PID like a normal fork call */
     return pid;
 }
 
@@ -242,6 +286,8 @@ void eval(char *cmdline)
         //必须放在builtin_cmd里面，因为如果放在外面，在执行内部命令的时候，就不会释放这些锁了
         Sigemptyset(&mask);
         Sigaddset(&mask,SIGCHLD);
+//        Sigaddset(&mask,SIGINT);
+//        Sigaddset(&mask,SIGTSTP);
         Sigprocmask(SIG_BLOCK,&mask,NULL);
 
         if((pid=Fork())==0)         //创建子进程,Running the child process.
@@ -495,6 +541,7 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+ //   printf("go into the SIGCHLD_HANDLER\n");
     int status;
     pid_t pid;
     //Waiting for/ handling all of the child processes according to their status
@@ -502,11 +549,13 @@ void sigchld_handler(int sig)
     {
         if(WIFSTOPPED(status))
         {
-             continue;
+             sigtstp_handler(-pid);
         }
+        //WIFSIGNALED表示因为未被捕获的信号而中断，适用于子进程自己给自己发送KILL而中断
         else if(WIFSIGNALED(status))
         {
-              continue;
+            //表示进程自己给自己发信号而造成的程序中止
+              sigint_handler(-pid);
         }
         else if(WIFEXITED(status))
         {
@@ -528,15 +577,22 @@ void sigint_handler(int sig)
     pid_t pid=fgpid(jobs);
     int jid=pid2jid(pid);
 
-
+    //只处理前台进程
     if(pid!=0)
     {
-
-        kill(-pid,SIGINT);
+        //说明是进程通过kill函数发送的信号, 通过sigchld_handler发的信号
+        if(pid==-sig)
+        {
+            printf("Job [%d] (%d) terminated by signal %d\n",pid2jid(-sig),-sig,2);
+            deletejob(jobs,-sig);
+        }
         // when sig<0, send SIGINT singal to all foreground process
-        printf("Job [%d] (%d) terminated by signal %d\n",jid,pid,sig);
-        deletejob(jobs,pid);
-
+        else if(sig==SIGINT)
+        {
+            kill(-pid,SIGINT);
+            printf("Job [%d] (%d) terminated by signal %d\n",jid,pid,sig);
+            deletejob(jobs,pid);
+        }
         //只触发一次sigint_handler,实现对进程的发送信息，打印结果，删除任务
  
     }
@@ -551,14 +607,27 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+//    printf("Go Into the sigtstp_handler\n");
+ //   printf("receive the signal number:%d\n",sig);
     pid_t pid=fgpid(jobs);
     int jid=pid2jid(pid);
     //send fg job/ related process group signal
     if(pid!=0)
     {
-        printf("Job [%d] (%d) Stopped by signal %d\n",jid,pid,sig);
-        getjobpid(jobs,pid)->state=ST;
-        kill(-pid,SIGTSTP);
+        //通过ctrl-z发送信号
+        if(sig==20)
+        {
+            printf("Job [%d] (%d) Stopped by signal %d\n",jid,pid,sig);
+            getjobpid(jobs,pid)->state=ST;
+            kill(-pid,SIGTSTP);
+        }
+        //通过自己发送kill函数发送信号
+        else if(pid==-sig)
+        {
+            printf("Job [%d] (%d) Stopped by signal %d\n",jid,pid,20);
+            getjobpid(jobs,pid)->state=ST;
+        }
+        //其他情况说明是已经停止的进程通过sigchild发送信息
     }
     return;
 }
