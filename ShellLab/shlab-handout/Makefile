@@ -58,6 +58,24 @@ test15:
 test16:
 	$(DRIVER) -t trace16.txt -s $(TSH) -a $(TSHARGS)
 
+testall:
+	$(DRIVER) -t trace01.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace02.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace03.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace04.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace05.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace06.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace07.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace08.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace09.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace10.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace11.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace12.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace13.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace14.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace15.txt -s $(TSH) -a $(TSHARGS)
+	$(DRIVER) -t trace16.txt -s $(TSH) -a $(TSHARGS)
+
 # Run the tests using the reference shell program
 rtest01:
 	$(DRIVER) -t trace01.txt -s $(TSHREF) -a $(TSHARGS)

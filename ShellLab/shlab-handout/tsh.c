@@ -541,7 +541,6 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
- //   printf("go into the SIGCHLD_HANDLER\n");
     int status;
     pid_t pid;
     //Waiting for/ handling all of the child processes according to their status
@@ -607,8 +606,6 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
-//    printf("Go Into the sigtstp_handler\n");
- //   printf("receive the signal number:%d\n",sig);
     pid_t pid=fgpid(jobs);
     int jid=pid2jid(pid);
     //send fg job/ related process group signal
